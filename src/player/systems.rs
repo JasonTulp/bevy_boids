@@ -1,14 +1,10 @@
-use bevy::prelude::*;
-use bevy::render::mesh::PrimitiveTopology;
-use bevy::render::render_asset::RenderAssetUsages;
-use bevy::window::PrimaryWindow;
-use bevy::sprite::{MaterialMesh2dBundle, Mesh2dHandle};
-use crate::player::components::Player;
-use glam::Vec3;
+use crate::boid::{Acceleration, Boid, MaxVelocity, Velocity};
 use crate::constants::{PLAYER_FORCE, PLAYER_MAX_SPEED};
-use crate::enemy::{Acceleration, Boid, limit_vec, MaxVelocity, Velocity};
-use bevy_polyline::prelude::*;
+use crate::player::components::Player;
 use crate::trail::spawn_trail;
+use bevy::prelude::*;
+use bevy::sprite::{MaterialMesh2dBundle, Mesh2dHandle};
+use bevy::window::PrimaryWindow;
 
 pub fn spawn_player(
     mut commands: Commands,
@@ -26,19 +22,21 @@ pub fn spawn_player(
     let material = materials.add(Color::srgb_u8(0, 200, 255));
     let acceleration = Acceleration(Vec2::ZERO);
     let velocity = Velocity(Vec2::ZERO);
-    let player = commands.spawn((
-        MaterialMesh2dBundle {
-           mesh,
-           material,
-           transform,
-           ..default()
-        },
-        Player,
-        acceleration,
-        velocity,
-        MaxVelocity(PLAYER_MAX_SPEED),
-        Boid { weight: 10000.0 },
-    )).id();
+    let player = commands
+        .spawn((
+            MaterialMesh2dBundle {
+                mesh,
+                material,
+                transform,
+                ..default()
+            },
+            Player,
+            acceleration,
+            velocity,
+            MaxVelocity(PLAYER_MAX_SPEED),
+            Boid { weight: 10000.0 },
+        ))
+        .id();
 
     spawn_trail(
         player,
@@ -69,31 +67,13 @@ pub fn spawn_player(
     );
 }
 
-pub fn spawn_player_sprite(
-    mut commands: Commands,
-    window_query: Query<&Window, With<PrimaryWindow>>,
-    asset_server: Res<AssetServer>,
-) {
-    let window = window_query.get_single().expect("No window found");
-    let transform = Transform::from_xyz(window.width() / 2.0, window.height() / 2.0, 0.0)
-        .with_scale(Vec3::splat(0.02));
-
-    commands.spawn((
-        SpriteBundle {
-            transform,
-            texture: asset_server.load("sprites/arrow.png"),
-            ..default()
-        },
-        Player,
-    ));
-}
-
+/// Move player based on WASD or Arrow Key input
 pub fn move_player(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut player_query: Query<(&mut Transform, &mut Acceleration, &Velocity, &Player)>,
     time: Res<Time>,
 ) {
-    if let Ok((mut transform, mut acceleration, velocity, _)) = player_query.get_single_mut() {
+    if let Ok((_, mut acceleration, velocity, _)) = player_query.get_single_mut() {
         let mut direction = Vec2::ZERO;
 
         if keyboard_input.pressed(KeyCode::ArrowLeft) || keyboard_input.pressed(KeyCode::KeyA) {

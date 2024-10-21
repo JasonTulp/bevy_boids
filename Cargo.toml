@@ -9,10 +9,7 @@ edition = "2021"
 bevy = "0.14.2"
 glam = "0.27.0"
 rand = "0.8.5"
-bevy_hanabi = "0.12"
 bevy-inspector-egui = "0.27.0"
-bevy_polyline = "0.10"
-#bevy_prototype_debug_lines = "0.12"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
