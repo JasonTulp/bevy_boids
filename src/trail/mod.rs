@@ -125,6 +125,7 @@ fn update_trail(
 
 /// Update a single points position and calculate the position of the corresponding vertices
 /// Rotation is calculated based on the direction of the new position from the old position
+/// TODO Move this to impl on TrailRenderer
 fn update_trail_point(
     i: usize,
     new_pos: Vec2,

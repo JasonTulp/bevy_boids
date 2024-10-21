@@ -1,5 +1,5 @@
 [package]
-name = "bevy-test"
+name = "bevy-boids"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,6 +10,8 @@ bevy = "0.14.2"
 glam = "0.27.0"
 rand = "0.8.5"
 bevy-inspector-egui = "0.27.0"
+bevy_spatial = "0.9.1"
+bevy-fps-counter = "0.5.0"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
