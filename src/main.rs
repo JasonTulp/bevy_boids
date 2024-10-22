@@ -1,17 +1,16 @@
 use bevy::prelude::*;
-use std::time::Duration;
+use bevy_fps_counter::FpsCounterPlugin;
 use bevy_inspector_egui::quick::ResourceInspectorPlugin;
 use bevy_spatial::{AutomaticUpdate, SpatialStructure};
-use bevy_fps_counter::{FpsCounterPlugin};
+use std::time::Duration;
 
 mod boid;
 mod camera;
 pub mod constants;
 mod player;
+mod spatial_hash_map;
 mod trail;
 mod window_resize;
-mod spatial_hash_map;
-
 
 fn main() {
     App::new()
@@ -25,8 +24,10 @@ fn main() {
         .add_plugins(ResourceInspectorPlugin::<boid::Settings>::new())
         .add_plugins(FpsCounterPlugin)
         // TODO Replace with a spatial hash grid
-        .add_plugins(AutomaticUpdate::<crate::boid::Boid>::new()
-             .with_spatial_ds(SpatialStructure::KDTree2)
-             .with_frequency(Duration::from_millis(100)))
+        .add_plugins(
+            AutomaticUpdate::<crate::boid::Boid>::new()
+                .with_spatial_ds(SpatialStructure::KDTree2)
+                .with_frequency(Duration::from_millis(100)),
+        )
         .run();
 }

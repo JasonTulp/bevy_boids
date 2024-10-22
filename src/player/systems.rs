@@ -1,7 +1,7 @@
 use crate::boid::{Acceleration, Boid, MaxVelocity, Velocity};
 use crate::constants::{PLAYER_FORCE, PLAYER_MAX_SPEED};
 use crate::player::components::Player;
-use crate::trail::spawn_trail;
+use crate::trail::prelude::*;
 use bevy::prelude::*;
 use bevy::sprite::{MaterialMesh2dBundle, Mesh2dHandle};
 use bevy::window::PrimaryWindow;
@@ -38,33 +38,23 @@ pub fn spawn_player(
         ))
         .id();
 
-    spawn_trail(
-        player,
-        100,
-        1.0,
-        &mut commands,
-        transform.translation.xy(),
-        Vec2::new(7.0, -8.0),
-        Color::srgba_u8(0, 200, 255, 255),
-        Color::srgba_u8(148, 22, 250, 0),
-        -1.0,
-        &mut materials,
-        &mut meshes,
-    );
+    // Spawn right trail
+    TrailBuilder::new(player, transform.translation.xy())
+        .with_local_offset(Vec2::new(7.0, -8.0))
+        .with_colour(TrailColour::gradient(
+            Color::srgba_u8(0, 200, 255, 255),
+            Color::srgba_u8(148, 22, 250, 0),
+        ))
+        .build(&mut commands, &mut materials, &mut meshes);
 
-    spawn_trail(
-        player,
-        100,
-        1.0,
-        &mut commands,
-        transform.translation.xy(),
-        Vec2::new(-7.0, -8.0),
-        Color::srgba_u8(0, 200, 255, 255),
-        Color::srgba_u8(148, 22, 250, 0),
-        -1.0,
-        &mut materials,
-        &mut meshes,
-    );
+    // Spawn left trail
+    TrailBuilder::new(player, transform.translation.xy())
+        .with_local_offset(Vec2::new(-7.0, -8.0))
+        .with_colour(TrailColour::gradient(
+            Color::srgba_u8(0, 200, 255, 255),
+            Color::srgba_u8(148, 22, 250, 0),
+        ))
+        .build(&mut commands, &mut materials, &mut meshes);
 }
 
 /// Move player based on WASD or Arrow Key input

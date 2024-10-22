@@ -1,34 +1,38 @@
+mod systems;
+
 use bevy::prelude::*;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::render::render_asset::RenderAssetUsages;
-use bevy::sprite::Mesh2dHandle;
+
+#[allow(unused_imports)]
+pub mod prelude {
+    pub use super::{FollowEntity, SimpleTrail2D, TrailBuilder, TrailColour, TrailPlugin};
+}
 
 pub struct TrailPlugin;
 
 impl Plugin for TrailPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostUpdate, update_trail);
+        app.add_systems(PostUpdate, systems::update_trail);
     }
-}
-
-#[derive(Component)]
-pub struct TrailRenderer {
-    pub thickness: f32,
-    // pub min_distance: f32,
-    pub local_offset: Vec2,
-    pub points: Vec<Vec2>,
-    pub taper_end: bool,
 }
 
 #[derive(Component)]
 pub struct FollowEntity(Entity);
 
-impl TrailRenderer {
+#[derive(Component)]
+pub struct SimpleTrail2D {
+    pub thickness: f32,
+    pub local_offset: Vec2,
+    pub points: Vec<Vec2>,
+    pub taper_end: bool,
+}
+
+impl SimpleTrail2D {
     pub fn new(segments: u16, thickness: f32, spawn_pos: Vec2, local_offset: Vec2) -> Self {
         let vec = vec![spawn_pos; segments as usize];
         Self {
             thickness,
-            // min_distance: 2.0,
             local_offset,
             points: vec,
             taper_end: true,
@@ -36,117 +40,150 @@ impl TrailRenderer {
     }
 }
 
-/// Call this to create the trail entity, returns the entity ID to be parented
-pub fn spawn_trail(
+/// Used to build a trail entity
+pub struct TrailBuilder {
+    /// The entity that this trail is attached to.
+    /// It will follow this entity in PostUpdate
     follow_entity: Entity,
+    /// How many segments the trail will have
     segments: u16,
+    /// The thickness of the trail at the thickest point
     thickness: f32,
-    commands: &mut Commands,
+    /// Whether the trail should taper at the end (Reduce thickness to 0)
+    taper_end: bool,
+    /// The position of the trail when it is spawned
     spawn_pos: Vec2,
+    /// The local offset from the follow entity, takes into account entity rotation
     local_offset: Vec2,
-    colour_2: Color,
-    colour_1: Color,
+    /// The colour of the trail, can be single or gradient
+    colour: TrailColour,
+    /// The Z-depth of the trail
     depth: f32,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
-    meshes: &mut ResMut<Assets<Mesh>>,
-) {
-    // TODO segments must be greater than 1
-    let trail_renderer = TrailRenderer::new(segments, thickness, spawn_pos, local_offset);
-    let vertices: Vec<Vec3> = vec![];
-
-    let mut colours: Vec<[f32; 4]> = Vec::with_capacity(segments as usize * 2);
-    for i in 0..segments {
-        let c1 = colour_1.to_srgba();
-        let c2 = colour_2.to_srgba();
-        let red = c1.red + (c2.red - c1.red) * i as f32 / segments as f32;
-        let green = c1.green + (c2.green - c1.green) * i as f32 / segments as f32;
-        let blue = c1.blue + (c2.blue - c1.blue) * i as f32 / segments as f32;
-        let alpha = c1.alpha + (c2.alpha - c1.alpha) * i as f32 / segments as f32;
-        colours.push([red, green, blue, alpha]);
-        colours.push([red, green, blue, alpha]);
-    }
-
-    let trail_mesh = meshes.add(
-        Mesh::new(
-            PrimitiveTopology::TriangleStrip,
-            RenderAssetUsages::default(),
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours),
-    );
-    let trail_mat = materials.add(ColorMaterial::from_color(Color::WHITE));
-    let transform = Transform::from_xyz(0.0, 0.0, depth);
-    commands.spawn((
-        ColorMesh2dBundle {
-            mesh: trail_mesh.clone().into(),
-            material: trail_mat,
-            transform,
-            ..default()
-        },
-        trail_renderer,
-        FollowEntity(follow_entity),
-    ));
 }
 
-/// Update all the points in the trail based on the follow entity
-fn update_trail(
-    transforms: Query<&Transform>,
-    mut query: Query<(&mut TrailRenderer, &mut Mesh2dHandle, &FollowEntity)>,
-    mut assets: ResMut<Assets<Mesh>>,
-) {
-    for (mut trail_renderer, mesh, follow_entity) in query.iter_mut() {
-        let follow = transforms
-            .get(follow_entity.0)
-            .expect("Follow entity not found");
-        let mut vertices: Vec<Vec3> = Vec::with_capacity(trail_renderer.points.len() * 2);
-        // Get offset based on rotation of follow
-        let offset = follow.rotation.mul_vec3(Vec3::new(
-            trail_renderer.local_offset.x,
-            trail_renderer.local_offset.y,
-            0.0,
-        ));
-        let offset = offset.xy();
-
-        // Update the trail points from the end to the start
-        for i in (1..trail_renderer.points.len()).rev() {
-            let new_pos = trail_renderer.points[i - 1].xy();
-            update_trail_point(i, new_pos, &mut trail_renderer, &mut vertices);
+#[allow(dead_code)]
+impl TrailBuilder {
+    /// Create a new TrailBuilder with default values
+    pub fn new(follow_entity: Entity, spawn_pos: Vec2) -> Self {
+        Self {
+            follow_entity,
+            segments: 100,
+            thickness: 1.0,
+            taper_end: true,
+            spawn_pos,
+            local_offset: Vec2::ZERO,
+            colour: TrailColour::single(Color::WHITE),
+            depth: -1.0,
         }
+    }
 
-        // Add the new point at the start
-        let new_pos = follow.translation.xy() + offset;
-        update_trail_point(0, new_pos, &mut trail_renderer, &mut vertices);
+    /// Build the Trail Renderer and return the spawned entity
+    pub fn build(
+        self,
+        commands: &mut Commands,
+        materials: &mut ResMut<Assets<ColorMaterial>>,
+        meshes: &mut ResMut<Assets<Mesh>>,
+    ) -> Entity {
+        let trail_renderer = SimpleTrail2D::new(
+            self.segments,
+            self.thickness,
+            self.spawn_pos,
+            self.local_offset,
+        );
+        let colours = self.colour.get_vertex_colours(self.segments);
+        let trail_mesh = meshes.add(
+            Mesh::new(
+                PrimitiveTopology::TriangleStrip,
+                RenderAssetUsages::default(),
+            )
+            // .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![])
+            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours),
+        );
+        let trail_mat = materials.add(ColorMaterial::from_color(Color::WHITE));
+        let transform = Transform::from_xyz(0.0, 0.0, self.depth);
+        commands.spawn((
+            ColorMesh2dBundle {
+                mesh: trail_mesh.clone().into(),
+                material: trail_mat,
+                transform,
+                ..default()
+            },
+            trail_renderer,
+            FollowEntity(self.follow_entity),
+        )).id()
+    }
 
-        // Update the mesh
-        let mesh = assets.get_mut(mesh.id()).unwrap();
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+    /// Set the number of segments in the trail
+    pub fn with_segments(mut self, segments: u16) -> Self {
+        self.segments = segments;
+        self
+    }
+
+    /// Set the thickness of the trail
+    pub fn with_thickness(mut self, thickness: f32) -> Self {
+        self.thickness = thickness;
+        self
+    }
+
+    /// Set whether the trail should taper at the end
+    pub fn with_taper_end(mut self, taper_end: bool) -> Self {
+        self.taper_end = taper_end;
+        self
+    }
+
+    /// Set the spawn position of the trail
+    pub fn with_local_offset(mut self, local_offset: Vec2) -> Self {
+        self.local_offset = local_offset;
+        self
+    }
+
+    /// Set the colour of the trail
+    pub fn with_colour(mut self, colour: TrailColour) -> Self {
+        self.colour = colour;
+        self
+    }
+
+    /// Set the Z-depth of the trail
+    pub fn with_depth(mut self, depth: f32) -> Self {
+        self.depth = depth;
+        self
     }
 }
 
-/// Update a single points position and calculate the position of the corresponding vertices
-/// Rotation is calculated based on the direction of the new position from the old position
-/// TODO Move this to impl on TrailRenderer
-fn update_trail_point(
-    i: usize,
-    new_pos: Vec2,
-    trail_renderer: &mut TrailRenderer,
-    vertices: &mut Vec<Vec3>,
-) {
-    let thickness = match trail_renderer.taper_end {
-        true => {
-            let t = i as f32 / trail_renderer.points.len() as f32;
-            trail_renderer.thickness - trail_renderer.thickness * t
+/// Colour of the trail, can be a single colour or gradient
+pub enum TrailColour {
+    Gradient { start: Color, end: Color },
+    Single(Color),
+}
+
+impl TrailColour {
+    pub fn gradient(start: Color, end: Color) -> Self {
+        Self::Gradient { start, end }
+    }
+
+    pub fn single(colour: Color) -> Self {
+        Self::Single(colour)
+    }
+
+    pub fn get_vertex_colours(&self, segments: u16) -> Vec<[f32; 4]> {
+        match self {
+            Self::Gradient { start, end } => Self::get_gradient(start, end, segments),
+            Self::Single(colour) => vec![colour.to_srgba().to_f32_array(); segments as usize * 2],
         }
-        false => trail_renderer.thickness,
-    };
-    let dir = new_pos - trail_renderer.points[i];
-    let perp = Vec3::new(dir.y, -dir.x, 0.0).normalize() * thickness / 2.0;
-    trail_renderer.points[i as usize] = new_pos;
-    let point_vec3 = Vec3::new(
-        trail_renderer.points[i as usize].x,
-        trail_renderer.points[i as usize].y,
-        0.0,
-    );
-    vertices.push(point_vec3 - perp);
-    vertices.push(point_vec3 + perp);
+    }
+
+    fn get_gradient(start: &Color, end: &Color, segments: u16) -> Vec<[f32; 4]> {
+        let mut colours: Vec<[f32; 4]> = Vec::with_capacity(segments as usize * 2);
+        for i in 0..segments {
+            let c1 = end.to_srgba();
+            let c2 = start.to_srgba();
+            let red = c1.red + (c2.red - c1.red) * i as f32 / segments as f32;
+            let green = c1.green + (c2.green - c1.green) * i as f32 / segments as f32;
+            let blue = c1.blue + (c2.blue - c1.blue) * i as f32 / segments as f32;
+            let alpha = c1.alpha + (c2.alpha - c1.alpha) * i as f32 / segments as f32;
+            colours.push([red, green, blue, alpha]);
+            colours.push([red, green, blue, alpha]);
+        }
+        colours
+    }
 }

@@ -1,6 +1,6 @@
 use crate::constants::{BOID_COUNT, ENEMY_SPEED};
 use crate::player::components::Player;
-use crate::trail::spawn_trail;
+use crate::trail::prelude::*;
 use bevy::prelude::*;
 use bevy::sprite::{MaterialMesh2dBundle, Mesh2dHandle};
 use bevy::window::PrimaryWindow;
@@ -87,10 +87,10 @@ pub fn spawn_boids(
         let x = random::<f32>() * window.width();
         let y = random::<f32>() * window.height();
         let transform = Transform::from_xyz(x, y, 0.0);
-        let velocity = Velocity(Vec2::new(
-            random::<f32>() - 0.5,
-            random::<f32>() - 0.5,
-        ).normalize() * settings.max_speed);
+        let velocity = Velocity(
+            Vec2::new(random::<f32>() - 0.5, random::<f32>() - 0.5).normalize()
+                * settings.max_speed,
+        );
         let acceleration = Acceleration(Vec2::ZERO);
         let mesh = Mesh2dHandle(meshes.add(Triangle2d::new(
             Vec2::Y * 4.0,
@@ -112,19 +112,16 @@ pub fn spawn_boids(
             ))
             .id();
 
-        spawn_trail(
-            boid,
-            100,
-            2.5,
-            &mut commands,
-            transform.translation.xy(),
-            Vec2::new(0.0, -4.0),
-            Color::srgba_u8(255, 55, 0, 255),
-            Color::srgba_u8(255, 0, 0, 0),
-            -2.0 - random::<f32>() * 100.0,
-            &mut materials,
-            &mut meshes,
-        );
+        TrailBuilder::new(boid, transform.translation.xy())
+            .with_local_offset(Vec2::new(0.0, -4.0))
+            .with_colour(TrailColour::gradient(
+                Color::srgba_u8(255, 55, 0, 255),
+                Color::srgba_u8(255, 0, 0, 0),
+            ))
+            .with_segments(100)
+            .with_thickness(2.5)
+            .with_depth(-2.0 - random::<f32>() * 100.0)
+            .build(&mut commands, &mut materials, &mut meshes);
     }
 }
 
@@ -277,7 +274,6 @@ pub fn boid_flock_old(
     }
 }
 
-
 /// Flock the boids by following the alignment, cohesion and separation rules
 pub fn boid_flock(
     treeaccess: Res<KDTree2<Boid>>,
@@ -311,7 +307,9 @@ pub fn boid_flock(
         let position: Vec2 = transform.translation.truncate();
 
         for (_, entity) in treeaccess.within_distance(position, settings.visual_radius) {
-            if let Ok((other_transform, other_velocity, boid)) = neighbour_query.get(entity.unwrap()) {
+            if let Ok((other_transform, other_velocity, boid)) =
+                neighbour_query.get(entity.unwrap())
+            {
                 let other_position: Vec2 = other_transform.translation.truncate();
                 let weight = boid.weight;
                 if position == other_position {
